@@ -32,6 +32,7 @@ setup(
         'flatland',
         'translitcodec',
         'nose',
+	'pyzmq',
         ],
   classifiers=[
         'Development Status :: 3 - Alpha',
