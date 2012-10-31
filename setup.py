@@ -31,6 +31,7 @@ setup(
       install_requires=[
         'flatland',
         'translitcodec',
+        'nose',
         ],
   classifiers=[
         'Development Status :: 3 - Alpha',
