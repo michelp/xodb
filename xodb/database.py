@@ -3,6 +3,7 @@ from __future__ import absolute_import
 import time
 import string
 import logging
+from uuid import uuid4
 from collections import namedtuple
 from contextlib import contextmanager
 
@@ -64,9 +65,11 @@ def to_term(value, prefix=None):
 
 
 class QuerySchema(Schema):
-    term = Array.of(String).using(getter=lambda s, o, e: list(o),
-                                  prefix='query_term')
-    id = Array.of(String).using(prefix='query_id')
+    type = String.using(default='xodbquery')
+    term = Array.of(String).using(prefix='query_term',
+                                  getter=lambda s, o, e: list(o))
+    id = Array.of(String).using(prefix='query_id',
+                                getter=lambda s, o, e: o.__xodb_id__)
 
 
 class Query(object):
@@ -78,22 +81,25 @@ class Query(object):
             return getattr(xapian.Query, name)
 
     def __init__(self, *args, **kwargs):
-        self.query = kwargs.pop('query', None) or xapian.Query(*args, **kwargs)
+        self.__xodb_query__ = kwargs.pop('query', None) or xapian.Query(*args, **kwargs)
+        self.__xodb_id__ = uuid4()
 
     def __getattr__(self, name):
-        return getattr(self.query, name)
+        return getattr(self.__xodb_query__, name)
 
     def __getstate__(self):
-        return dict(query=self.query.serialise())
+        return dict(query=self.__xodb_query__.serialise(),
+                    id=str(self.__xodb_id__))
 
     def __setstate__(self, state):
-        self.query = xapian_Query.unserialise(state['query'])
+        self.__xodb_query__ = xapian_Query.unserialise(state['query'])
+        self.__xodb_id__ = uuid.UUID(state['id'])
 
     def __str__(self):
-        return str(self.query)
+        return str(self.__xodb_query__)
 
     def __iter__(self):
-        return iter(self.query)
+        return iter(self.__xodb_query__)
 
 
 class RecordSchema(Schema):
@@ -870,7 +876,7 @@ class Database(object):
                              default_op, parser_flags)
         if echo:
             print "Done parsing query: %s" % str(query)
-        enq.set_query(query.query)
+        enq.set_query(query.__xodb_query__)
 
         limit = limit or self.backend.get_doccount()
 
@@ -952,7 +958,7 @@ class Database(object):
         if echo:
             print str(query)
         enq = xapian.Enquire(self.backend)
-        enq.set_query(query.query)
+        enq.set_query(query.__xodb_query__)
 
         mset = self._build_mset(enq, retry_limit=retry_limit)
         return mset.size()
@@ -1069,7 +1075,7 @@ class Database(object):
                              default_op, parser_flags,
                              retry_limit=retry_limit)
 
-        enq.set_query(query.query)
+        enq.set_query(query.__xodb_query__)
         op = lambda: enq.get_mset(0, 0, limit)
         mset = self.retry_if_modified(op, retry_limit)
 
@@ -1127,7 +1133,8 @@ class Database(object):
                 default_op=Query.OP_AND,
                 parser_flags=default_parser_flags,
                 retry_limit=RETRY_LIMIT,
-                format_term=True):
+                format_term=True,
+                collapse_stems=True):
         """
         Suggest terms that would possibly yield more relevant results
         for the given query.
@@ -1142,7 +1149,7 @@ class Database(object):
 
         if echo:
             print str(query)
-        enq.set_query(query.query)
+        enq.set_query(query.__xodb_query__)
 
         mset = self._build_mset(enq, offset=moffset, limit=mlimit,
                                 retry_limit=retry_limit)
@@ -1171,6 +1178,12 @@ class Database(object):
                 enq.INCLUDE_QUERY_TERMS,
                 1.0, decider, -3)
 
+        stemmer = None
+        stems = None
+        if collapse_stems:
+            stems = set()
+            stemmer = xapian.Stem(language)
+
         eset = self.retry_if_modified(op, retry_limit)
 
         for item in eset.items:
@@ -1181,6 +1194,10 @@ class Database(object):
                     val = '%s:"%s"' % (prefix, suffix)
                 else:
                     val = '%s:%s' % (prefix, suffix)
+            if collapse_stems:
+                if stemmer(val) in stems:
+                    continue
+                stems.add(stemmer(val))
             if score:
                 yield (val, item[1])
             else:

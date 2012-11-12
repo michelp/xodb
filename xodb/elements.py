@@ -153,6 +153,8 @@ class Schema(SparseForm):
                             self._memo.add_term(
                                 _prefix(self.facet_prefix, term),
                                 True)
+            if not el.store:
+                el.value = None
         return True
 
     def _handle_scalar(self, term, value, element, type=None):
@@ -281,6 +283,12 @@ class _BaseElement(object):
 
     If False, store the flattened element in the document record, but
     do not generate terms or values.
+    """
+
+    store = True
+    """If True, store this elements value when the schema is saved.
+
+    If False, this element is not stored on the schema.
     """
 
     getter = None

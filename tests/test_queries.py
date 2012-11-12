@@ -55,6 +55,7 @@ class PersonSchema(Schema):
     salary = Integer.named('salary')
     rank = Integer.using(sortable=True)
     nothing = Integer.using(facet=True, optional=True)
+    nostore = Integer.using(optional=True, store=False)
 
     description = Text.using(prefix=False)
     cualificaciones = Text.using(language="es")
