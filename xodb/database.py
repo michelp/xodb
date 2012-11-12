@@ -16,7 +16,7 @@ from xapian import Query, QueryParser, DocNotFoundError
 
 from . import snowball
 from .exc import ValidationError, PrefixError
-from .tools import LRUDict
+from .tools import LRUDict, lazy_property
 
 
 RETRY_LIMIT = 5
@@ -65,27 +65,40 @@ def to_term(value, prefix=None):
 class Record(object):
     """Nice attribute-accessable record for a search result."""
 
-    def __init__(self, schema, document, percent, rank, weight):
-        self._xodb_schema = schema
+    def __init__(self, document, percent, rank, weight):
         self._xodb_document = document
         self._xodb_percent = percent
         self._xodb_rank = rank
         self._xodb_weight = weight
 
+    @lazy_property
+    def _xodb_schema(self):
+        typ, data = loads(self._xodb_document.get_data())
+        return _lookup_schema(typ).from_flat(data)
+
     def __getattr__(self, name):
         try:
-            if name not in self._xodb_schema:
-                self._xodb_schema.setdefault(name)
             return self._xodb_schema[name].value
-        except (KeyError, TypeError):
+        except KeyError:
             raise AttributeError(name)
 
     def __repr__(self):
         return repr(self._xodb_schema)
 
+    def __getstate__(self):
+        state = self.__dict__.copy()
+        if '_xodb_schema' in state:
+            del state['_xodb_schema']
+        state['_xodb_document'] = self._xodb_document.serialise()
+        return state
 
-def record_factory(database, data, doc, percent, rank, weight):
-    return Record(data, doc, percent, rank, weight)
+    def __setstate__(self, state):
+        self.__dict__.update(state)
+        self._xodb_document = xapian.Document.unserialise(self._xodb_document)
+
+
+def record_factory(database, doc, percent, rank, weight):
+    return Record(doc, percent, rank, weight)
 
 
 class LanguageDecider(xapian.ExpandDecider):
@@ -851,8 +864,7 @@ class Database(object):
                             continue
                         typ, data = loads(data)
                         seen.add(docid)
-                        yield self.record_factory(_lookup_schema(typ).from_flat(data),
-                                                  doc,
+                        yield self.record_factory(doc,
                                                   record.percent,
                                                   record.rank,
                                                   record.weight,

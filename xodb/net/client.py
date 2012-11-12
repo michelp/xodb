@@ -151,37 +151,3 @@ if __name__ == "__main__":
     import random
     c = Client(client_url, timeout, retry_limit)
     p = PromiseClient(client_url, timeout, retry_limit)
-
-
-    #stupid benchmarker
-    global words
-    words = None
-    from multiprocessing import Process
-    def countby(n, r):
-        global words
-        if words is None:
-            print 'fetching terms'
-            words = [t.split(':')[1] for t in c.allterms('XDESCRIPTION')]
-        def go():
-            got = 0
-            s = Client(client_url, timeout, retry_limit)
-            for i in xrange(n):
-                w = random.choice(words)
-                try:
-                    s.query(w, limit=10)
-                except TimeoutError:
-                    print 'timeout'
-                    s = Client(client_url, timeout, retry_limit)
-                got += 1
-            time.sleep(1)
-
-        procs = [Process(target=go) for i in xrange(r)]
-        print 'Starting %s processes fetching %s random queries each.' % (r, n)
-        start = time.time()
-        [p.start() for p in procs]
-        [p.join() for p in procs]
-	took = time.time() - start
-        print 'Took ', took, ' (%s r/s)' % ((n*r)/took)
-
-
-

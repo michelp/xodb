@@ -6,3 +6,5 @@ syntax: glob
 *.swp
 *.egg-info
 .virt/*
+var/ipc/*
+var/log/*

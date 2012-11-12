@@ -3,7 +3,7 @@ import time
 import logging
 from cPickle import loads, dumps
 
-from ordereddict import OrderedDict
+from collections import OrderedDict
 
 
 class RetryError(Exception):
