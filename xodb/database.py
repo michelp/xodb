@@ -12,9 +12,10 @@ from operator import itemgetter
 from functools import partial
 from json import loads
 
-from xapian import Query, QueryParser, DocNotFoundError
+from xapian import QueryParser, DocNotFoundError
 
 from . import snowball
+from .elements import Schema, String, Integer, Float, Array
 from .exc import ValidationError, PrefixError
 from .tools import LRUDict, lazy_property
 
@@ -62,14 +63,57 @@ def to_term(value, prefix=None):
     return _prefix(prefix) + value if prefix else value
 
 
+class QuerySchema(Schema):
+    term = Array.of(String).using(getter=lambda s, o, e: list(o),
+                                  prefix='query_term')
+    id = Array.of(String).using(prefix='query_id')
+
+
+class Query(object):
+    __xodb_schema__ = QuerySchema
+
+    class __metaclass__(type):
+
+        def __getattr__(cls, name):
+            return getattr(xapian.Query, name)
+
+    def __init__(self, *args, **kwargs):
+        self.query = kwargs.pop('query', None) or xapian.Query(*args, **kwargs)
+
+    def __getattr__(self, name):
+        return getattr(self.query, name)
+
+    def __getstate__(self):
+        return dict(query=self.query.serialise())
+
+    def __setstate__(self, state):
+        self.query = xapian_Query.unserialise(state['query'])
+
+    def __str__(self):
+        return str(self.query)
+
+    def __iter__(self):
+        return iter(self.query)
+
+
+class RecordSchema(Schema):
+    type = String.using(default='xodbrecord')
+    rank = Integer.using(getter=lambda s, o, e: o._xodb_rank)
+    percent = Integer.using(getter=lambda s, o, e: o._xodb_percent)
+    weight = Integer.using(getter=lambda s, o, e: o._xodb_weight)
+
+
 class Record(object):
     """Nice attribute-accessable record for a search result."""
+    __xodb_schema__ = RecordSchema
 
-    def __init__(self, document, percent, rank, weight):
+    def __init__(self, document, percent, rank, weight, query, db):
         self._xodb_document = document
         self._xodb_percent = percent
         self._xodb_rank = rank
         self._xodb_weight = weight
+        self._xodb_query = query
+        self._xodb_db = db
 
     @lazy_property
     def _xodb_schema(self):
@@ -97,8 +141,8 @@ class Record(object):
         self._xodb_document = xapian.Document.unserialise(self._xodb_document)
 
 
-def record_factory(database, doc, percent, rank, weight):
-    return Record(doc, percent, rank, weight)
+def record_factory(database, doc, percent, rank, weight, query, db):
+    return Record(doc, percent, rank, weight, query, db)
 
 
 class LanguageDecider(xapian.ExpandDecider):
@@ -308,6 +352,8 @@ class Database(object):
     def schema_for(self, otype):
         """Get the schema for a given type, or one of its
         superclasses."""
+        if hasattr(otype, '__xodb_schema__'):
+            return otype.__xodb_schema__
         for base in otype.__mro__:
             if base in self.type_map:
                 return self.type_map[base]
@@ -505,6 +551,7 @@ class Database(object):
             else:
                 schema_type = self.schema_for(type(obj))
         schema = schema_type.from_defaults()
+        schema.__xodb_db__ = self
         schema.update_by_object(obj)
 
         if validate and not schema.validate():
@@ -523,8 +570,9 @@ class Database(object):
         Convienient wrapper that does the object->schema->document
         transformation.
         """
-        schema = self.to_schema(obj, validate, schema_type)
-        return self.doc_from_dict(schema.memo.dict)
+        if not isinstance(obj, Schema):
+            obj = self.to_schema(obj, validate, schema_type)
+        return self.doc_from_dict(obj.__xodb_memo__.dict)
 
     def doc_from_dict(self, data):
         """Take an intermediate representation of a document (a
@@ -780,7 +828,7 @@ class Database(object):
                 qp = self.get_query_parser(language, default_op, 
                                            retry_limit=retry_limit)
                 def query_op():
-                    return qp.parse_query(query, parser_flags)
+                    return Query(query=qp.parse_query(query, parser_flags))
                 result = self.retry_if_modified(query_op, retry_limit)
                 if not self.inmem:
                     self.query_cache[cache_key] = result
@@ -822,7 +870,7 @@ class Database(object):
                              default_op, parser_flags)
         if echo:
             print "Done parsing query: %s" % str(query)
-        enq.set_query(query)
+        enq.set_query(query.query)
 
         limit = limit or self.backend.get_doccount()
 
@@ -868,6 +916,8 @@ class Database(object):
                                                   record.percent,
                                                   record.rank,
                                                   record.weight,
+                                                  query,
+                                                  self,
                                                   )
                 # no errors exhuasting the set? break out and we're done
                 break
@@ -902,7 +952,7 @@ class Database(object):
         if echo:
             print str(query)
         enq = xapian.Enquire(self.backend)
-        enq.set_query(query)
+        enq.set_query(query.query)
 
         mset = self._build_mset(enq, retry_limit=retry_limit)
         return mset.size()
@@ -1019,7 +1069,7 @@ class Database(object):
                              default_op, parser_flags,
                              retry_limit=retry_limit)
 
-        enq.set_query(query)
+        enq.set_query(query.query)
         op = lambda: enq.get_mset(0, 0, limit)
         mset = self.retry_if_modified(op, retry_limit)
 
@@ -1092,7 +1142,7 @@ class Database(object):
 
         if echo:
             print str(query)
-        enq.set_query(query)
+        enq.set_query(query.query)
 
         mset = self._build_mset(enq, offset=moffset, limit=mlimit,
                                 retry_limit=retry_limit)

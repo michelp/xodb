@@ -48,7 +48,7 @@ def test_string():
                )
 
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
     assert d['lang'] == None
     assert (set(d['terms']) ==
             set([(u's3:s3', 'b', 1), (u'facet:s3', 'b'), (u's2', 'b', 1),
@@ -91,7 +91,7 @@ def test_integer():
                )
 
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
     assert d['lang'] == None
     assert (set(d['terms']) ==
             set([(u'i3:3', 'b', 1), (u'facet:i3', 'b'), (u'2', 'b', 1),
@@ -133,7 +133,7 @@ def test_date():
                )
 
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
     assert d['lang'] == None
     assert (set(d['terms']) ==
             set([(u'd3:20030303', 'b', 1), (u'd5:20050505', 'b', 1),
@@ -178,7 +178,7 @@ def test_datetime():
                )
 
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
     assert d['lang'] == None
     assert (set(d['terms']) ==
             set([('20000203', 'b', 1), (u'dt4:20000405', 'r', 1),
@@ -232,7 +232,7 @@ def test_text():
                )
 
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
     assert d['lang'] == u'en'
     assert d['posts'] == []
     assert set(d['terms']) == set([(u'language:en', 'b', 1),
@@ -290,7 +290,7 @@ def test_location():
                )
 
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
 
     assert d['lang'] == None
     assert set(d['terms']) == set([('loc_watttatcttttgctacgaagt', 'b', 1),
@@ -336,5 +336,5 @@ def test_ignore_invalid():
     s = LongOne.from_defaults()
     f = Object(s1='s1' * 250)
     s.update_by_object(f)
-    d = s.memo.dict
+    d = s.__xodb_memo__.dict
     assert not d['terms']

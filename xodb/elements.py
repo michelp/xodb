@@ -62,6 +62,8 @@ class Schema(SparseForm):
     When False (default) an invalid term in a document raises InvalidTermError.
     """
 
+    __xodb_db__ = None
+
     def update_by_object(self, obj):
         """Updates fields with an object's attributes.
 
@@ -87,7 +89,7 @@ class Schema(SparseForm):
                 self[name] = value
 
     @property
-    def memo(self):
+    def __xodb_memo__(self):
         """
         Walk the children, indexing each one with a handler into a
         memo object.
