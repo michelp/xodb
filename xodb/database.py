@@ -8,6 +8,7 @@ from collections import namedtuple
 from contextlib import contextmanager
 
 import xapian
+import nilsimsa
 
 from operator import itemgetter
 from functools import partial
@@ -859,6 +860,9 @@ class Database(object):
               match_spy=None,
               document=False,
               echo=False,
+              disimilate=False,
+              disimilate_field='nilsimsa',
+              disimilate_threshold=100,
               parser_flags=default_parser_flags,
               default_op=Query.OP_AND,
               retry_limit=RETRY_LIMIT):
@@ -890,6 +894,8 @@ class Database(object):
 
         tries = 0
         seen = set()
+        disimilator = set()
+        sim_comp = nilsimsa.compare_hexdigests
         while True:
             try:
                 # _build_mset may retry internally on DatabaseError
@@ -918,13 +924,25 @@ class Database(object):
                             continue
                         typ, data = loads(data)
                         seen.add(docid)
-                        yield self.record_factory(doc,
-                                                  record.percent,
-                                                  record.rank,
-                                                  record.weight,
-                                                  query,
-                                                  self,
-                                                  )
+                        record = self.record_factory(doc,
+                                                     record.percent,
+                                                     record.rank,
+                                                     record.weight,
+                                                     query,
+                                                     self,
+                                                     )
+                        if disimilate:
+                            yield_it = True
+                            rhash = getattr(record, disimilate_field, None)
+                            if rhash:
+                                if any((sim_comp(rhash, h) > disimilate_threshold)
+                                       for h in set(disimilator)):
+                                    yield_it = False
+                            if yield_it:
+                                disimilator.add(rhash)
+                                yield record
+                        else:
+                            yield record
                 # no errors exhuasting the set? break out and we're done
                 break
             except xapian.DatabaseError, e:

@@ -20,6 +20,7 @@ from . elements import (
     Integer,
     List,
     Location,
+    Nilsimsa,
     NumericRange,
     Schema,
     String,

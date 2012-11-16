@@ -2,6 +2,7 @@ import logging
 import unicodedata
 import translitcodec
 
+import nilsimsa
 from flatland import schema
 from flatland.schema.forms import _MetaForm
 from json import dumps
@@ -103,11 +104,11 @@ class Schema(SparseForm):
 
         self._memo = Memo()
         self._memo.set_lang(lang)
-        self._handle_children(self)
+        self._handle_children(self, None)
         self._memo.data = dumps((_schema_name(self), self.flatten()))
         return self._memo
 
-    def _handle_children(self, parent):
+    def _handle_children(self, parent, grandparent):
         for el in parent.children:
             if el.index:
                 if isinstance(el, String):
@@ -128,6 +129,8 @@ class Schema(SparseForm):
                     handler = self._handle_numericrange
                 elif isinstance(el, Location):
                     handler = self._handle_location
+                elif isinstance(el, Nilsimsa):
+                    handler = self._handle_nilsimsa
                 elif isinstance(el, List):
                     handler = self._handle_children
                 elif isinstance(el, Dict):
@@ -139,7 +142,7 @@ class Schema(SparseForm):
 
                 value = None
                 try:
-                    value = handler(el)
+                    value = handler(el, parent)
                 except InvalidTermError, e:
                     if self.ignore_invalid_terms:
                         logger.warning('Invalid term ignored: %r' % el)
@@ -171,40 +174,40 @@ class Schema(SparseForm):
                 memo.add_value(name, value, type)
             return value
 
-    def _handle_string(self, element):
+    def _handle_string(self, element, parent):
         term = element.u
         value = element.value
         if value:
             return self._handle_scalar(term, value, element, 'string')
 
-    def _handle_integer(self, element):
+    def _handle_integer(self, element, parent):
         term = element.u
         value = element.value
         if value:
             return self._handle_scalar(term, value, element, 'integer')
 
-    def _handle_float(self, element):
+    def _handle_float(self, element, parent):
         # TODO:mp floats are currently storage only
         pass
 
-    def _handle_boolean(self, element):
+    def _handle_boolean(self, element, parent):
         value = 'true' if element.value else 'false'
         if value:
             return self._handle_scalar(value, value, element, 'integer')
 
-    def _handle_date(self, element):
+    def _handle_date(self, element, parent):
         if element.value:
             term = element.value.strftime(element.term_format)
             value = element.value.strftime(element.value_format)
             return self._handle_scalar(term, value, element, 'date')
 
-    def _handle_datetime(self, element):
+    def _handle_datetime(self, element, parent):
         if element.value:
             term = element.value.strftime(element.term_format)
             value = element.value.strftime(element.value_format)
             return self._handle_scalar(term, value, element, 'datetime')
 
-    def _handle_text(self, element):
+    def _handle_text(self, element, parent):
         value = element.value
         if value is None:
             return
@@ -245,7 +248,7 @@ class Schema(SparseForm):
                       element.position_start)
         return value
 
-    def _handle_numericrange(self, element):
+    def _handle_numericrange(self, element, parent):
         maxv = element['high'].value or 0
         minv = element['low'].value or 0
         if minv == maxv == 0:
@@ -267,12 +270,26 @@ class Schema(SparseForm):
                                 element.wdf_inc)
         return True
 
-    def _handle_location(self, element):
+    def _handle_location(self, element, parent):
         memo = self._memo
         h = 'loc_' + element.hash(element.radians)
         memo.add_term(h, element.boolean, element.wdf_inc)
         if element.sortable:
             memo.add_value(element.name, h, 'location')
+        return True
+
+    def _handle_nilsimsa(self, element, parent):
+        memo = self._memo
+        try:
+            val = (parent[element.from_field].value
+                   .encode('translit/long')
+                   .encode('ascii', 'ignore'))
+            element.u = nilsimsa.Nilsimsa([val]).hexdigest()
+        except Exception:
+            print 'whoops: ', val
+            return
+        if element.u:
+            return self._handle_scalar(element.u, element.u, element, 'string')
         return True
 
 
@@ -503,6 +520,15 @@ class NumericRange(_BaseRange):
 
     step = 1
     """The step size for the numeric range.  Default is 1.
+    """
+
+
+class Nilsimsa(schema.String, _BaseElement):
+
+    from_field = None
+    """What other field the simhash should be computed from.
+
+    If this is not provided, indexing will raise an error.
     """
 
 
