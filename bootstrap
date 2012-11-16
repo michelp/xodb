@@ -1,4 +1,6 @@
 virtualenv .virt --distribute --system-site-packages
 . .virt/bin/activate
 python setup.py develop
+# don't ask... -mp
+rm .virt/bin/nilsimsa.py
 

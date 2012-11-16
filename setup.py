@@ -17,7 +17,7 @@ from setuptools import setup, find_packages
 setup(
   name="xodb",
   version="0.4.22",
-  packages=find_packages(exclude=['tests.*', 'tests']),
+  packages=find_packages(exclude=['tests.*', 'tests', '.virt']),
 
   tests_require=['nose', 'translitcodec'],
   test_suite='nose.collector',
@@ -33,6 +33,7 @@ setup(
         'translitcodec',
         'nose',
 	'pyzmq',
+        'nilsimsa',
         ],
   classifiers=[
         'Development Status :: 3 - Alpha',
