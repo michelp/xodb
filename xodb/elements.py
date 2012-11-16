@@ -1,10 +1,12 @@
 import logging
 import unicodedata
 import translitcodec
+import cPickle
 
 import nilsimsa
 from flatland import schema
 from flatland.schema.forms import _MetaForm
+from flatland.exc import AdaptationError
 from json import dumps
 
 from . memo import Memo
@@ -131,6 +133,8 @@ class Schema(SparseForm):
                     handler = self._handle_location
                 elif isinstance(el, Nilsimsa):
                     handler = self._handle_nilsimsa
+                elif isinstance(el, Pickle):
+                    handler = self._handle_pickle
                 elif isinstance(el, List):
                     handler = self._handle_children
                 elif isinstance(el, Dict):
@@ -292,6 +296,8 @@ class Schema(SparseForm):
             return self._handle_scalar(element.u, element.u, element, 'string')
         return True
 
+    def _handle_pickle(self, element, parent):
+        return True
 
 class _BaseElement(object):
 
@@ -563,3 +569,24 @@ class Location(schema.Compound, _BaseElement):
         lat = self['lat'].value
         lon = self['lon'].value
         return geoprint.encode(lat, lon, radians=radians)
+
+
+class Pickle(schema.Scalar, _BaseElement):
+    # broken
+
+    def serialize(self, value):
+        return unicode(cPickle.dumps(value).encode('base64'))
+
+    def adapt(self, value):
+        if value is None:
+            return None
+        if isinstance(value, basestring):
+            try:
+                return cPickle.loads(str(value).decode('base64'))
+            except cPickle.UnpicklingError:
+                raise AdaptationError()
+        else:
+            raise AdaptationError()
+
+    def getter(self, sc, ob, el):
+        return unicode(cPickle.dumps(ob).encode('base64'))
