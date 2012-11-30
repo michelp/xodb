@@ -2,7 +2,7 @@ import time
 import string
 import logging
 from uuid import uuid4
-from collections import namedtuple
+from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 
 import xapian
@@ -80,6 +80,7 @@ class Query(object):
             return getattr(xapian.Query, name)
 
     def __init__(self, *args, **kwargs):
+        args = [a.__xodb_query__ if isinstance(a, type(self)) else a for a in args]
         self.__xodb_query__ = kwargs.pop('query', None) or xapian.Query(*args, **kwargs)
         self.__xodb_id__ = uuid4()
 
@@ -817,6 +818,8 @@ class Database(object):
         into the new query, recursively querify on each item of the
         sequence.
         """
+        if isinstance(query, xapian.Query):
+            return query
         if isinstance(query, Query):
             return query
         if isinstance(query, basestring):
@@ -988,7 +991,8 @@ class Database(object):
               klimit=1.0,
               kmlimit=1.0,
               echo=False,
-              retry_limit=RETRY_LIMIT):
+              retry_limit=RETRY_LIMIT,
+              include_query_terms=True):
         """Get facet suggestions for the query, then the query with
         each suggested facet, asking xapian for an estimated count of
         each sub-query.
@@ -1010,7 +1014,8 @@ class Database(object):
                                    kmlimit=kmlimit,
                                    echo=echo,
                                    retry_limit=retry_limit,
-                                   format_term=False)
+                                   format_term=False,
+                                   include_query_terms=include_query_terms)
         for facet in suggestions:
             q = Query(Query.OP_AND, [query, facet])
             if echo:
@@ -1030,7 +1035,8 @@ class Database(object):
                translit=None,
                default_op=Query.OP_AND,
                parser_flags=default_parser_flags,
-               retry_limit=RETRY_LIMIT):
+               retry_limit=RETRY_LIMIT,
+               include_query_terms=True):
         """
         Expand a query on a given set of prefixes.
         """
@@ -1051,7 +1057,8 @@ class Database(object):
             q, prefix=head, language=language, echo=echo,
             limit=limit, mlimit=mlimit,
             klimit=klimit, kmlimit=kmlimit,
-            retry_limit=retry_limit).items()
+            retry_limit=retry_limit,
+            include_query_terms=include_query_terms).items()
 
         for name, score in r:
             if tail:
@@ -1065,7 +1072,7 @@ class Database(object):
                 results[(name, score)] = r
             else:
                 results[(name, score)] = score
-        return results
+        return OrderedDict(sorted(results.items(), key=lambda i: i[0][1], reverse=True))
 
     def estimate(self, query,
                  limit=0,
@@ -1150,7 +1157,8 @@ class Database(object):
                 parser_flags=default_parser_flags,
                 retry_limit=RETRY_LIMIT,
                 format_term=True,
-                collapse_stems=True):
+                collapse_stems=True,
+                include_query_terms=True):
         """
         Suggest terms that would possibly yield more relevant results
         for the given query.
@@ -1186,12 +1194,12 @@ class Database(object):
         if xapian_version <= (1, 2, 4):
             op = lambda: enq.get_eset(
                 limit, rset,
-                enq.INCLUDE_QUERY_TERMS,
+                enq.INCLUDE_QUERY_TERMS if include_query_terms else 0,
                 1.0, decider)
         else:
             op = lambda: enq.get_eset(
                 limit, rset,
-                enq.INCLUDE_QUERY_TERMS,
+                enq.INCLUDE_QUERY_TERMS if include_query_terms else 0,
                 1.0, decider, -3)
 
         stemmer = None
