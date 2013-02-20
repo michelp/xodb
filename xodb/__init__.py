@@ -28,6 +28,8 @@ from . elements import (
     Text,
     )
 
+from .fdw import XODBFDW
+
 __all__ = [
     'Array',
     'Database',
@@ -46,6 +48,7 @@ __all__ = [
     'Schema',
     'String',
     'Text',
+    'XODBFDW',
     'geoprint',
     'inmemory',
     'open',
