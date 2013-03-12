@@ -1,7 +1,7 @@
 import time
 import string
 import logging
-from uuid import uuid4
+from uuid import uuid4, UUID
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 
@@ -15,7 +15,7 @@ from json import loads
 from xapian import QueryParser, DocNotFoundError
 
 from . import snowball
-from .elements import Schema, String, Integer, Float, Array
+from .elements import Schema, String, Integer, Array
 from .exc import ValidationError, PrefixError
 from .tools import LRUDict, lazy_property
 
@@ -92,8 +92,8 @@ class Query(object):
                     id=str(self.__xodb_id__))
 
     def __setstate__(self, state):
-        self.__xodb_query__ = xapian_Query.unserialise(state['query'])
-        self.__xodb_id__ = uuid.UUID(state['id'])
+        self.__xodb_query__ = xapian.Query.unserialise(state['query'])
+        self.__xodb_id__ = UUID(state['id'])
 
     def __str__(self):
         return str(self.__xodb_query__)
@@ -849,7 +849,8 @@ class Database(object):
                                         default_op,
                                         parser_flags) for q in query))
 
-    def query(self, query,
+    def query(self,
+              query='',
               offset=0,
               limit=0,
               order=None,
@@ -946,7 +947,7 @@ class Database(object):
                             yield record
                 # no errors exhuasting the set? break out and we're done
                 break
-            except xapian.DatabaseError, e:
+            except xapian.DatabaseError:
                 # an error occured, either, the db was closed, or the
                 # modified error happened two frequently in the inner
                 # loop, so we are going to replay the whole query
@@ -1074,7 +1075,8 @@ class Database(object):
                 results[(name, score)] = score
         return OrderedDict(sorted(results.items(), key=lambda i: i[0][1], reverse=True))
 
-    def estimate(self, query,
+    def estimate(self,
+                 query='',
                  limit=0,
                  klimit=1.0,
                  language=None,
@@ -1103,6 +1105,26 @@ class Database(object):
         mset = self.retry_if_modified(op, retry_limit)
 
         return mset.get_matches_estimated()
+
+
+    def elite(self, query,
+              limit=0,
+              klimit=1.0,
+              language=None,
+              translit=None,
+              default_op=Query.OP_AND,
+              parser_flags=default_parser_flags,
+              retry_limit=RETRY_LIMIT):
+        self.reopen()
+        
+        if limit == 0:
+            limit = int(self.backend.get_doccount() * klimit)
+        
+        return Query(xapian.Query(
+                xapian.Query.OP_ELITE_SET, 
+                list(self.querify(query, language, translit,
+                                  default_op, parser_flags,
+                                  retry_limit=retry_limit).__xodb_query__)))
 
     def term_freq(self, term):
         """
