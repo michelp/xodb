@@ -56,17 +56,13 @@ class XODBFDW(ForeignDataWrapper):
         return kwargs
 
     def execute(self, quals, columns):
-        # f.write(repr(quals))
-        # f.flush()
-        # for q in quals:
-        #     yield dict(name=q.field_name, operator=q.operator, value=q.value)
         kwargs = self._parse_query_quals(quals)
         for r in self.db.query(**kwargs):
             yield {col: kwargs[col[3:]] if col.startswith('_x_') else getattr(r, col) for col in columns}
 
-    # def get_rel_size(self, quals, columns):
-    #     args, kwargs = self._parse_estimate_quals(quals)
-    #     return (self.db.estimate(*args, **kwargs), self.db.get_avlength())
+    def get_rel_size(self, quals, columns):
+        args, kwargs = self._parse_estimate_quals(quals)
+        return (self.db.estimate(*args, **kwargs), self.db.get_avlength())
 
     # def get_path_keys(self):
     #     pass
