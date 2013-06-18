@@ -57,7 +57,7 @@ class PersonSchema(Schema):
     nothing = Integer.using(facet=True, optional=True)
     nostore = Integer.using(optional=True, store=False)
 
-    description = Text.using(prefix=False)
+    description = Text.using(prefix=False, sortable=True)
     cualificaciones = Text.using(language="es")
 
     keywords = Array.of(String)

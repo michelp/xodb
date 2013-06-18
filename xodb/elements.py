@@ -283,7 +283,6 @@ class Schema(SparseForm):
         return True
 
     def _handle_nilsimsa(self, element, parent):
-        memo = self._memo
         try:
             val = (parent[element.from_field].value
                    .encode('translit/long')
