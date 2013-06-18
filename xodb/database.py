@@ -5,6 +5,7 @@ import uuid
 from uuid import uuid4
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
+from datetime import datetime, date
 
 import xapian
 import nilsimsa
@@ -16,7 +17,7 @@ from json import loads
 from xapian import QueryParser, DocNotFoundError
 
 from . import snowball
-from .elements import Schema, String, Integer, Array
+from .elements import Schema, String, Integer, Array, DateTime, Date
 from .exc import ValidationError, PrefixError
 from .tools import LRUDict, lazy_property
 
@@ -130,7 +131,15 @@ class Record(object):
     def __getattr__(self, name):
         slot = self._xodb_db.values.get(name)
         if slot:
-            return self._xodb_document.get_value(slot)
+            typ = self._xodb_db.value_sorts[name]
+            val = self._xodb_document.get_value(slot)
+            if typ == 'datetime':
+                return datetime.strptime(val, DateTime.value_format)
+            if typ == 'date':
+                return datetime.strptime(val, Date.value_format).date()
+            if typ == 'integer':
+                return xapian.sortable_unserialise(val)
+            return val
         try:
             return self._xodb_schema[name].value
         except KeyError:
