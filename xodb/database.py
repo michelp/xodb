@@ -1,6 +1,7 @@
 import time
 import string
 import logging
+import uuid
 from uuid import uuid4
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
@@ -15,7 +16,7 @@ from json import loads
 from xapian import QueryParser, DocNotFoundError
 
 from . import snowball
-from .elements import Schema, String, Integer, Float, Array
+from .elements import Schema, String, Integer, Array
 from .exc import ValidationError, PrefixError
 from .tools import LRUDict, lazy_property
 
@@ -92,7 +93,7 @@ class Query(object):
                     id=str(self.__xodb_id__))
 
     def __setstate__(self, state):
-        self.__xodb_query__ = xapian_Query.unserialise(state['query'])
+        self.__xodb_query__ = xapian.Query.unserialise(state['query'])
         self.__xodb_id__ = uuid.UUID(state['id'])
 
     def __str__(self):
@@ -127,6 +128,9 @@ class Record(object):
         return _lookup_schema(typ).from_flat(data)
 
     def __getattr__(self, name):
+        slot = self._xodb_db.values.get(name)
+        if slot:
+            return self._xodb_document.get_value(slot)
         try:
             return self._xodb_schema[name].value
         except KeyError:
