@@ -171,8 +171,10 @@ class Schema(SparseForm):
             if element.lower:
                 term = term.lower()
             if element.prefix:
-                memo.add_term(_prefix(name, term), element.boolean, element.wdf_inc)
+                prefixed = _normalize(_prefix(name, term))
+                memo.add_term(prefixed, element.boolean, element.wdf_inc)
             else:
+                term = _normalize(term)
                 memo.add_term(term, element.boolean, element.wdf_inc)
             if element.sortable:
                 memo.add_value(name, value, type)
