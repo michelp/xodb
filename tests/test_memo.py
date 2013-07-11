@@ -320,11 +320,17 @@ def test_location():
                              (u'l4_lon', u'-10.677068'),
                              (u'l4_lat', u'10.062500'),
                              ])
-    
+
 
 def test_long_term():
     m = Memo()
     assert_raises(InvalidTermError, m.add_term, " " * 250)
+
+
+def test_string_normalizes_unicode():
+    stringer = Stringer.from_defaults()
+    stringer['s1'].set(u'\xc3\xb1' * 230)
+    assert_raises(InvalidTermError, getattr, stringer, '__xodb_memo__')
 
 
 class LongOne(Schema):
