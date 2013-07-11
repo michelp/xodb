@@ -28,10 +28,13 @@ def _prefix(prefix, value=None):
     return ("%s:%s" % (prefix, value)) if value else prefix
 
 
-def _normalize(value):
-    return unicodedata.normalize(
-        'NFKC', unicode(value).strip().lower()).encode('utf-8')
-
+def _normalize(value, lower=True):
+    if lower:
+        return unicodedata.normalize(
+            'NFKC', unicode(value).strip().lower()).encode('utf-8')
+    else:
+        return unicodedata.normalize(
+            'NFKC', unicode(value).strip()).encode('utf-8')
 
 _use_schema = object() # marker says use schema term generator
 
@@ -168,13 +171,11 @@ class Schema(SparseForm):
         name = element.flattened_name()
         memo = self._memo
         if term:
-            if element.lower:
-                term = term.lower()
             if element.prefix:
-                prefixed = _normalize(_prefix(name, term))
+                prefixed = _normalize(_prefix(name, term), lower=element.lower)
                 memo.add_term(prefixed, element.boolean, element.wdf_inc)
             else:
-                term = _normalize(term)
+                term = _normalize(term, lower=element.lower)
                 memo.add_term(term, element.boolean, element.wdf_inc)
             if element.sortable:
                 memo.add_value(name, value, type)
