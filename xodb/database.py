@@ -1,7 +1,6 @@
 import time
 import string
 import logging
-from uuid import uuid4
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 
@@ -12,10 +11,10 @@ from operator import itemgetter
 from functools import partial
 from json import loads
 
-from xapian import QueryParser, DocNotFoundError
+from xapian import Query, QueryParser, DocNotFoundError
 
 from . import snowball
-from .elements import Schema, String, Integer, Float, Array
+from .elements import Schema
 from .exc import ValidationError, PrefixError
 from .tools import LRUDict, lazy_property
 
@@ -63,55 +62,8 @@ def to_term(value, prefix=None):
     return _prefix(prefix) + value if prefix else value
 
 
-class QuerySchema(Schema):
-    type = String.using(default='xodbquery')
-    term = Array.of(String).using(prefix='query_term',
-                                  getter=lambda s, o, e: list(o))
-    id = Array.of(String).using(prefix='query_id',
-                                getter=lambda s, o, e: o.__xodb_id__)
-
-
-class Query(object):
-    __xodb_schema__ = QuerySchema
-
-    class __metaclass__(type):
-
-        def __getattr__(cls, name):
-            return getattr(xapian.Query, name)
-
-    def __init__(self, *args, **kwargs):
-        args = [a.__xodb_query__ if isinstance(a, type(self)) else a for a in args]
-        self.__xodb_query__ = kwargs.pop('query', None) or xapian.Query(*args, **kwargs)
-        self.__xodb_id__ = uuid4()
-
-    def __getattr__(self, name):
-        return getattr(self.__xodb_query__, name)
-
-    def __getstate__(self):
-        return dict(query=self.__xodb_query__.serialise(),
-                    id=str(self.__xodb_id__))
-
-    def __setstate__(self, state):
-        self.__xodb_query__ = xapian_Query.unserialise(state['query'])
-        self.__xodb_id__ = uuid.UUID(state['id'])
-
-    def __str__(self):
-        return str(self.__xodb_query__)
-
-    def __iter__(self):
-        return iter(self.__xodb_query__)
-
-
-class RecordSchema(Schema):
-    type = String.using(default='xodbrecord')
-    rank = Integer.using(getter=lambda s, o, e: o._xodb_rank)
-    percent = Integer.using(getter=lambda s, o, e: o._xodb_percent)
-    weight = Integer.using(getter=lambda s, o, e: o._xodb_weight)
-
-
 class Record(object):
     """Nice attribute-accessable record for a search result."""
-    __xodb_schema__ = RecordSchema
 
     def __init__(self, document, percent, rank, weight, query, db):
         self._xodb_document = document
@@ -818,8 +770,6 @@ class Database(object):
         into the new query, recursively querify on each item of the
         sequence.
         """
-        if isinstance(query, xapian.Query):
-            return query
         if isinstance(query, Query):
             return query
         if isinstance(query, basestring):
@@ -836,7 +786,7 @@ class Database(object):
                 qp = self.get_query_parser(language, default_op, 
                                            retry_limit=retry_limit)
                 def query_op():
-                    return Query(query=qp.parse_query(query, parser_flags))
+                    return qp.parse_query(query, parser_flags)
                 result = self.retry_if_modified(query_op, retry_limit)
                 if not self.inmem:
                     self.query_cache[cache_key] = result
@@ -881,7 +831,7 @@ class Database(object):
                              default_op, parser_flags)
         if echo:
             print "Done parsing query: %s" % str(query)
-        enq.set_query(query.__xodb_query__)
+        enq.set_query(query)
 
         limit = limit or self.backend.get_doccount()
 
@@ -946,7 +896,7 @@ class Database(object):
                             yield record
                 # no errors exhuasting the set? break out and we're done
                 break
-            except xapian.DatabaseError, e:
+            except xapian.DatabaseError:
                 # an error occured, either, the db was closed, or the
                 # modified error happened two frequently in the inner
                 # loop, so we are going to replay the whole query
@@ -977,7 +927,7 @@ class Database(object):
         if echo:
             print str(query)
         enq = xapian.Enquire(self.backend)
-        enq.set_query(query.__xodb_query__)
+        enq.set_query(query)
 
         mset = self._build_mset(enq, retry_limit=retry_limit)
         return mset.size()
@@ -1098,7 +1048,7 @@ class Database(object):
                              default_op, parser_flags,
                              retry_limit=retry_limit)
 
-        enq.set_query(query.__xodb_query__)
+        enq.set_query(query)
         op = lambda: enq.get_mset(0, 0, limit)
         mset = self.retry_if_modified(op, retry_limit)
 
@@ -1173,7 +1123,7 @@ class Database(object):
 
         if echo:
             print str(query)
-        enq.set_query(query.__xodb_query__)
+        enq.set_query(query)
 
         mset = self._build_mset(enq, offset=moffset, limit=mlimit,
                                 retry_limit=retry_limit)

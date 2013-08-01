@@ -134,10 +134,6 @@ class Schema(SparseForm):
                     handler = self._handle_numericrange
                 elif isinstance(el, Location):
                     handler = self._handle_location
-                elif isinstance(el, Nilsimsa):
-                    handler = self._handle_nilsimsa
-                elif isinstance(el, Pickle):
-                    handler = self._handle_pickle
                 elif isinstance(el, List):
                     handler = self._handle_children
                 elif isinstance(el, Dict):
@@ -150,7 +146,7 @@ class Schema(SparseForm):
                 value = None
                 try:
                     value = handler(el, parent)
-                except InvalidTermError, e:
+                except InvalidTermError:
                     if self.ignore_invalid_terms:
                         logger.warning('Invalid term ignored: %r' % el)
                     else:
@@ -285,22 +281,6 @@ class Schema(SparseForm):
             memo.add_value(element.name, h, 'location')
         return True
 
-    def _handle_nilsimsa(self, element, parent):
-        memo = self._memo
-        try:
-            val = (parent[element.from_field].value
-                   .encode('translit/long')
-                   .encode('ascii', 'ignore'))
-            element.u = nilsimsa.Nilsimsa([val]).hexdigest()
-        except Exception:
-            print 'whoops: ', val
-            return
-        if element.u:
-            return self._handle_scalar(element.u, element.u, element, 'string')
-        return True
-
-    def _handle_pickle(self, element, parent):
-        return True
 
 class _BaseElement(object):
 
@@ -532,15 +512,6 @@ class NumericRange(_BaseRange):
     """
 
 
-class Nilsimsa(schema.String, _BaseElement):
-
-    from_field = None
-    """What other field the simhash should be computed from.
-
-    If this is not provided, indexing will raise an error.
-    """
-
-
 class Location(schema.Compound, _BaseElement):
     """ Compound location is a 2-tuple of lat/lon coordinates.
     """
@@ -574,22 +545,3 @@ class Location(schema.Compound, _BaseElement):
         return geoprint.encode(lat, lon, radians=radians)
 
 
-class Pickle(schema.Scalar, _BaseElement):
-    # broken
-
-    def serialize(self, value):
-        return unicode(cPickle.dumps(value).encode('base64'))
-
-    def adapt(self, value):
-        if value is None:
-            return None
-        if isinstance(value, basestring):
-            try:
-                return cPickle.loads(str(value).decode('base64'))
-            except cPickle.UnpicklingError:
-                raise AdaptationError()
-        else:
-            raise AdaptationError()
-
-    def getter(self, sc, ob, el):
-        return unicode(cPickle.dumps(ob).encode('base64'))
