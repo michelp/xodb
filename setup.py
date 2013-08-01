@@ -16,7 +16,7 @@ from setuptools import setup, find_packages
 
 setup(
   name="xodb",
-  version="0.6.0",
+  version="0.6.1",
   packages=find_packages(exclude=['tests.*', 'tests', '.virt']),
 
   tests_require=['nose', 'translitcodec'],
@@ -27,7 +27,7 @@ setup(
   description='experimental xapian object database',
   long_description=__doc__,
   license='MIT License',
-  url='http://bitbucket.org/pelletier_michel/xodb/',
+  url='https://github.com/michelp/xodb',
       install_requires=[
         'flatland',
         'translitcodec',
