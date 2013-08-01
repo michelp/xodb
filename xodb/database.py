@@ -72,13 +72,26 @@ class Record(object):
         self._xodb_weight = weight
         self._xodb_query = query
         self._xodb_db = db
+        self._loaded = False
 
     @lazy_property
     def _xodb_schema(self):
         typ, data = loads(self._xodb_document.get_data())
+        self._loaded = True
         return _lookup_schema(typ).from_flat(data)
 
     def __getattr__(self, name):
+        if not self._loaded:
+            # short circuit expensive schema loading,
+            # if value is available
+            sort = self._xodb_db.value_sorts.get(name)
+            # TODO: date, datetime
+            if sort and sort in ('integer', 'string'):
+                num = self._xodb_db.values[name]
+                val = self._xodb_document.get_value(num)
+                if sort == 'integer':
+                    val = xapian.sortable_unserialise(val)
+                return val
         try:
             return self._xodb_schema[name].value
         except KeyError:
