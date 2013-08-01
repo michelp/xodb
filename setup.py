@@ -29,7 +29,7 @@ setup(
   license='MIT License',
   url='https://github.com/michelp/xodb',
       install_requires=[
-        'flatland',
+        'flatland==dev',
         'translitcodec',
         'nose',
 	'pyzmq',
