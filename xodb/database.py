@@ -1,6 +1,7 @@
 import time
 import string
 import logging
+from functools import wraps
 from collections import namedtuple, OrderedDict
 from contextlib import contextmanager
 
@@ -65,6 +66,8 @@ def to_term(value, prefix=None):
 class Record(object):
     """Nice attribute-accessable record for a search result."""
 
+    use_values = False
+
     def __init__(self, document, percent, rank, weight, query, db):
         self._xodb_document = document
         self._xodb_percent = percent
@@ -81,7 +84,7 @@ class Record(object):
         return _lookup_schema(typ).from_flat(data)
 
     def __getattr__(self, name):
-        if not self._loaded:
+        if (self.use_values or self._xodb_db.use_values) and not self._loaded:
             # short circuit expensive schema loading,
             # if value is available
             sort = self._xodb_db.value_sorts.get(name)
@@ -199,6 +202,17 @@ class MultipleValueRangeProcessor(xapian.ValueRangeProcessor):
         return (xapian.BAD_VALUENO, begin, end)
 
 
+def reconnector(func):
+    @wraps(func)
+    def _connect(db, *args, **kwargs):
+        try:
+            return func(db, *args, **kwargs)
+        except xapian.NetworkError:
+            db.reconnect()
+            raise
+    return _connect
+
+                     
 class Database(object):
     """An xodb database.
 
@@ -229,6 +243,7 @@ class Database(object):
     backend = None
     _metadata_keyset = None
     query_cache_limit = 1024
+    use_values = False
 
     @contextmanager
     def transaction(self):
@@ -275,6 +290,7 @@ class Database(object):
         self.query_cache = LRUDict(limit=self.query_cache_limit)
         self.inmem = inmem
         self._value_count = 0
+        self._timeout = 10000
 
         if isinstance(path, basestring):
             if writable:
@@ -293,7 +309,11 @@ class Database(object):
                 raise TypeError("replication can only be used "
                                 "if a database path is provided.")
             self.backend = self.db_path
-
+        elif isinstance(path, tuple):
+            if replicated:
+                raise TypeError("replication can only be used "
+                                "if a database path is provided.")
+            self.reconnect()
         self.reopen()
 
     def get_query_parser(self, language, default_op, check_cache=True, 
@@ -310,9 +330,20 @@ class Database(object):
             self.parsers_by_language[language] = qp
         return qp
 
+    def reconnect(self):
+        if self.backend is not None:
+            self.backend.close()
+            del self.backend
+        if self._writable:
+            self.backend = xapian.remote_open_writable(*self.db_path)
+        else:
+            self.backend = xapian.remote_open(*self.db_path)
+
+    @reconnector
     def close(self):
         self.backend.close()
 
+    @reconnector
     def flush(self):
         self.backend.flush()
 
@@ -766,6 +797,7 @@ class Database(object):
                 if self._writable:
                     self.value_count = 0
 
+    @reconnector
     def querify(self, query,
                 language=None,
                 translit=None,
@@ -812,6 +844,7 @@ class Database(object):
                                         default_op,
                                         parser_flags) for q in query))
 
+    @reconnector
     def query(self, query,
               offset=0,
               limit=0,
@@ -922,6 +955,7 @@ class Database(object):
                 self.reopen()
                 tries += 1
 
+    @reconnector
     def count(self,
               query="",
               language=None,
@@ -945,6 +979,7 @@ class Database(object):
         mset = self._build_mset(enq, retry_limit=retry_limit)
         return mset.size()
 
+    @reconnector
     def facet(self, query,
               prefix='facet',
               estimate=True,
@@ -992,6 +1027,7 @@ class Database(object):
             results[facet] = counter(q, language=language)
         return results
 
+    @reconnector
     def expand(self, query, expand,
                language=None,
                echo=False,
@@ -1037,6 +1073,7 @@ class Database(object):
                 results[(name, score)] = score
         return OrderedDict(sorted(results.items(), key=lambda i: i[0][1], reverse=True))
 
+    @reconnector
     def estimate(self, query,
                  limit=0,
                  klimit=1.0,
@@ -1067,6 +1104,7 @@ class Database(object):
 
         return mset.get_matches_estimated()
 
+    @reconnector
     def term_freq(self, term):
         """
         Return a count of the number of documents indexed for a given
@@ -1075,6 +1113,7 @@ class Database(object):
         self.reopen()
         return self.backend.get_termfreq(term)
 
+    @reconnector
     def describe_query(self, query,
                        language=None,
                        default_op=Query.OP_AND,
@@ -1088,6 +1127,7 @@ class Database(object):
             return qp.parse_query(query, default_parser_flags) 
         return str(self.retry_if_modified(op, retry_limit))
 
+    @reconnector
     def spell(self, query,
               language=None,
               default_op=Query.OP_AND,
@@ -1103,6 +1143,7 @@ class Database(object):
             return qp.get_corrected_query_string().decode('utf8')
         return self.retry_if_modified(op, retry_limit)
 
+    @reconnector
     def suggest(self, query,
                 offset=0,
                 limit=0,
