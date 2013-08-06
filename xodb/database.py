@@ -66,8 +66,6 @@ def to_term(value, prefix=None):
 class Record(object):
     """Nice attribute-accessable record for a search result."""
 
-    use_values = False
-
     def __init__(self, document, percent, rank, weight, query, db):
         self._xodb_document = document
         self._xodb_percent = percent
@@ -84,7 +82,7 @@ class Record(object):
         return _lookup_schema(typ).from_flat(data)
 
     def __getattr__(self, name):
-        if (self.use_values or self._xodb_db.use_values) and not self._loaded:
+        if self._xodb_db.use_values and not self._loaded:
             # short circuit expensive schema loading,
             # if value is available
             sort = self._xodb_db.value_sorts.get(name)
@@ -243,7 +241,7 @@ class Database(object):
     backend = None
     _metadata_keyset = None
     query_cache_limit = 1024
-    use_values = False
+    use_values = True
 
     @contextmanager
     def transaction(self):
