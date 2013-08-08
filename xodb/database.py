@@ -94,8 +94,10 @@ class Record(object):
                     val = xapian.sortable_unserialise(val)
                 return val
         try:
+            if name not in self._xodb_schema:
+                self._xodb_schema.setdefault(name)
             return self._xodb_schema[name].value
-        except KeyError:
+        except (KeyError, TypeError):
             raise AttributeError(name)
 
     def __repr__(self):
@@ -210,7 +212,7 @@ def reconnector(func):
             raise
     return _connect
 
-                     
+
 class Database(object):
     """An xodb database.
 
@@ -314,7 +316,7 @@ class Database(object):
             self.reconnect()
         self.reopen()
 
-    def get_query_parser(self, language, default_op, check_cache=True, 
+    def get_query_parser(self, language, default_op, check_cache=True,
                          retry_limit=RETRY_LIMIT):
         qp = None
         if check_cache and not self.inmem:
@@ -709,7 +711,7 @@ class Database(object):
         qp = QueryParser()
         qp.set_database(self.backend)
         qp.set_default_op(default_op)
-        
+
         if self.boolean_prefixes:
             for key, value in self.boolean_prefixes.items():
                 qp.add_boolean_prefix(key, value)
@@ -826,7 +828,7 @@ class Database(object):
                 if translit:
                     query = query.encode(translit)
 
-                qp = self.get_query_parser(language, default_op, 
+                qp = self.get_query_parser(language, default_op,
                                            retry_limit=retry_limit)
                 def query_op():
                     return qp.parse_query(query, parser_flags)
@@ -1122,7 +1124,7 @@ class Database(object):
         qp = self.get_query_parser(language, default_op,
                                    retry_limit=RETRY_LIMIT)
         def op():
-            return qp.parse_query(query, default_parser_flags) 
+            return qp.parse_query(query, default_parser_flags)
         return str(self.retry_if_modified(op, retry_limit))
 
     @reconnector
@@ -1134,7 +1136,7 @@ class Database(object):
         Suggest a query string with corrected spelling.
         """
         self.reopen()
-        qp = self.get_query_parser(language, default_op, 
+        qp = self.get_query_parser(language, default_op,
                                    retry_limit=RETRY_LIMIT)
         def op():
             qp.parse_query(query, QueryParser.FLAG_SPELLING_CORRECTION)
