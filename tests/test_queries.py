@@ -186,7 +186,7 @@ def test_string():
 def test_wdf():
     # this is kind of a low level test, but should hold for all future iterations of wdf algorithm
     assert db.query('name:joe')
-    assert ([[(t.term, t.wdf) for t in d._xodb_document.termlist()] for d in db.query('name:joe')] == 
+    assert ([[(t.term, t.wdf) for t in d._xodb_document.termlist()] for d in db.query('name:joe')] ==
             [[('XCLOCKED:20101010', 1),
               ('XCUALIFICACIONES:de', 1),
               ('XCUALIFICACIONES:paseador', 1),
@@ -244,6 +244,8 @@ def test_integer():
     assert db.count("rank:1..99") == 1
     assert db.count("rank:1..101") == 2
     assert db.count("rank:99..101") == 1
+    assert db.count("rank:..101") == 2
+    assert db.count("rank:99..") == 1
     assert db.count("rank:102..200") == 0
 
     assert ([t.rank for t in
