@@ -26,6 +26,8 @@ from . elements import (
     Text,
     )
 
+from . search import Search
+
 __all__ = [
     'Array',
     'Database',
@@ -40,6 +42,7 @@ __all__ = [
     'MultipleValueRangeProcessor',
     'NumericRange',
     'Schema',
+    'Search',
     'String',
     'Text',
     'geoprint',

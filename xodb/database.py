@@ -940,7 +940,7 @@ class Database(object):
                             yield_it = True
                             rhash = getattr(record, disimilate_field, None)
                             if rhash:
-                                if any(
+                                if rhash in disimilator or any(
                                     (_simhash_distance(rhash, h)
                                      < disimilate_threshold)
                                        for h in disimilator):
