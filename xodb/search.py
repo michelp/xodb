@@ -23,7 +23,7 @@ class Search(object):
     def __init__(self, db, query='', 
                  language=None, limit=None,
                  order=None, reverse=False,
-                 disimilate=False, disimilate_distance=28):
+                 disimilate=False, disimilate_threshold=28):
         if not isinstance(query, Query):
             query = db.querify(query)
         self.query = query
@@ -34,7 +34,7 @@ class Search(object):
         self._order = order
         self._reverse = reverse
         self._disimilate = disimilate
-        self._disimilate_distance = disimilate_distance
+        self._disimilate_threshold = disimilate_threshold
 
     def copy(self, **kwargs):
         args = dict(query=self.query,
@@ -43,10 +43,9 @@ class Search(object):
                     order=self._order,
                     reverse=self._reverse,
                     disimilate=self._disimilate,
-                    disimilate_distance=self._disimilate_distance)
+                    disimilate_threshold=self._disimilate_threshold)
         if kwargs:
             args.update(kwargs)
-
         return type(self)(self._db, **args)
 
     def operator(self, query, op):
@@ -89,11 +88,12 @@ class Search(object):
     def reverse(self, reverse):
         return self.copy(reverse=reverse)
 
-    def disimilate(self, disimilate):
-        return self.copy(disimilate=disimilate)
+    def disimilate(self, disimilate, disimilate_threshold=28):
+        return self.copy(disimilate=disimilate,
+                         disimilate_threshold=disimilate_threshold)
 
-    def disimilate_distance(self, disimilate_distance):
-        return self.copy(disimilate_distance=disimilate_distance)
+    def disimilate_threshold(self, disimilate_threshold):
+        return self.copy(disimilate_threshold=disimilate_threshold)
 
     def count(self):
         return self._db.count(self.query, language=self._language)
@@ -110,9 +110,12 @@ class Search(object):
     def records(self):
         """Generator over xapian results.
         """
-        return self._db.query(
+        for r in self._db.query(
             self.query, limit=self._limit, language=self._language,
-            order=self._order, reverse=self._reverse)
+            order=self._order, reverse=self._reverse,
+            disimilate=self._disimilate, 
+            disimilate_threshold=self._disimilate_threshold):
+            yield r
 
     @property
     def uids(self):
