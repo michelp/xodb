@@ -730,7 +730,10 @@ class Database(object):
             qp.add_valuerangeprocessor(MultipleValueRangeProcessor(
                 dict(((k, self.values[k])
                       for k, v in self.value_sorts.items() if v == 'integer')),
-                lambda s: xapian.sortable_serialise(float(s)),
+                serializer=lambda s: xapian.sortable_serialise(
+                    float(s) if s else float('-inf')),
+                end_serializer=lambda s: xapian.sortable_serialise(
+                    float(s) if s else float('inf')),
             ))
             # Then string and date
             qp.add_valuerangeprocessor(MultipleValueRangeProcessor(
