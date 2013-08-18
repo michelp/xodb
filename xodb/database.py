@@ -1,4 +1,5 @@
 import time
+
 import string
 import logging
 from functools import wraps
@@ -919,15 +920,6 @@ class Database(object):
                         seen.add(docid)
                         yield doc
                     else:
-                        # retry getting the actual document data
-                        op = lambda: self.backend.get_document(docid).get_data()
-                        try:
-                            data = self.retry_if_modified(op, retry_limit)
-                        except DocNotFoundError:
-                            logger.warning(
-                                "Document %d is gone, skipping.", docid)
-                            continue
-                        typ, data = loads(data)
                         seen.add(docid)
                         record = self.record_factory(doc,
                                                      record.percent,
@@ -1078,9 +1070,9 @@ class Database(object):
                     subq, tail, language, echo,
                     default_op, parser_flags,
                     retry_limit=retry_limit)
-                results[(name, score)] = r
+                results[name] = (score, r)
             else:
-                results[(name, score)] = score
+                results[name] = score
         return OrderedDict(sorted(results.items(), key=lambda i: i[0][1], reverse=True))
 
     @reconnector

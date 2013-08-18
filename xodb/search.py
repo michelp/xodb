@@ -23,7 +23,7 @@ class Search(object):
     def __init__(self, db, query='', 
                  language=None, limit=None,
                  order=None, reverse=False,
-                 disimilate=False, disimilate_threshold=28):
+                 disimilate=False, distance=28):
         if not isinstance(query, Query):
             query = db.querify(query)
         self.query = query
@@ -34,7 +34,7 @@ class Search(object):
         self._order = order
         self._reverse = reverse
         self._disimilate = disimilate
-        self._disimilate_threshold = disimilate_threshold
+        self._distance = distance
 
     def copy(self, **kwargs):
         args = dict(query=self.query,
@@ -43,7 +43,7 @@ class Search(object):
                     order=self._order,
                     reverse=self._reverse,
                     disimilate=self._disimilate,
-                    disimilate_threshold=self._disimilate_threshold)
+                    distance=self._distance)
         if kwargs:
             args.update(kwargs)
         return type(self)(self._db, **args)
@@ -72,8 +72,14 @@ class Search(object):
     def and_maybe(self, query):
         return self.operator(query, Query.OP_AND_MAYBE)
 
-    def expand(self, limit=10, mlimit=100):
-        candidates = self.suggest(limit, mlimit)
+    def and_elite(self, queries):
+        return self.and_(Query(Query.OP_ELITE_SET, queries))
+
+    def or_elite(self, *queries):
+        return self.or_(Query(Query.OP_ELITE_SET, queries))
+
+    def expand(self, prefix=None, limit=10, mlimit=100):
+        candidates = self.suggest(prefix, limit, mlimit)
         return self.or_(candidates)
 
     def limit(self, limit):
@@ -88,12 +94,12 @@ class Search(object):
     def reverse(self, reverse):
         return self.copy(reverse=reverse)
 
-    def disimilate(self, disimilate, disimilate_threshold=28):
+    def disimilate(self, disimilate, distance=28):
         return self.copy(disimilate=disimilate,
-                         disimilate_threshold=disimilate_threshold)
+                         distance=distance)
 
-    def disimilate_threshold(self, disimilate_threshold):
-        return self.copy(disimilate_threshold=disimilate_threshold)
+    def distance(self, distance):
+        return self.copy(distance=distance)
 
     def count(self):
         return self._db.count(self.query, language=self._language)
@@ -101,10 +107,10 @@ class Search(object):
     def estimate(self):
         return self._db.estimate(self.query, language=self._language)
 
-    def suggest(self, limit=10, mlimit=100):
+    def suggest(self, prefix=None, limit=10, mlimit=100):
         return list(self._db.suggest(
             self.query, language=self._language,
-            limit=limit, mlimit=mlimit))
+            prefix=prefix, limit=limit, mlimit=mlimit))
 
     @property
     def records(self):
@@ -114,7 +120,7 @@ class Search(object):
             self.query, limit=self._limit, language=self._language,
             order=self._order, reverse=self._reverse,
             disimilate=self._disimilate, 
-            disimilate_threshold=self._disimilate_threshold):
+            disimilate_threshold=self._distance):
             yield r
 
     @property
