@@ -1073,7 +1073,7 @@ class Database(object):
                 results[name] = (score, r)
             else:
                 results[name] = score
-        return OrderedDict(sorted(results.items(), key=lambda i: i[0][1], reverse=True))
+        return OrderedDict(sorted(results.items(), key=lambda i: i[1], reverse=True))
 
     @reconnector
     def estimate(self, query,
