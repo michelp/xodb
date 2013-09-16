@@ -877,14 +877,19 @@ class Database(object):
         """
         self.reopen()
 
-        enq = xapian.Enquire(self.backend)
-        if echo:
-            print "Parsing query."
-        query = self.querify(query, language, translit,
+        def get_enquire():
+            # Enquire requires a reference to the currently opened backend
+            enq = xapian.Enquire(self.backend)
+            if echo:
+                print "Parsing query."
+            q = self.querify(query, language, translit,
                              default_op, parser_flags)
-        if echo:
-            print "Done parsing query: %s" % str(query)
-        enq.set_query(query)
+            if echo:
+                print "Done parsing query: %s" % str(query)
+            enq.set_query(q)
+            return enq
+
+        enq = get_enquire()
 
         limit = limit or self.backend.get_doccount()
 
@@ -953,8 +958,9 @@ class Database(object):
                         'Database replay failed after %s retries.',
                         tries)
                     raise
-                logger.info('Replaying database query.')
                 self.reopen()
+                enq = get_enquire()
+                logger.info('Replaying database query.')
                 tries += 1
 
     @reconnector
