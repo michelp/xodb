@@ -227,6 +227,24 @@ def reconnector(func):
     return _connect
 
 
+def query_counter(func):
+    """Adds a parameter to db that will be the count of concurrent queries.
+
+       See `Database.query` for use case.
+    """
+    @wraps(func)
+    def counter(db, *args, **kwargs):
+        try:
+            if not hasattr(db, 'query_count'):
+                db.query_count = 0
+            db.query_count += 1
+            for x in func(db, *args, **kwargs):
+                yield x
+        finally:
+            db.query_count -= 1
+    return counter
+
+
 class Database(object):
     """An xodb database.
 
@@ -864,6 +882,7 @@ class Database(object):
                                         default_op,
                                         parser_flags) for q in query))
 
+    @query_counter
     @reconnector
     def query(self, query,
               offset=0,
@@ -889,7 +908,13 @@ class Database(object):
         object.  A string is passed into xapians QueryParser first to
         generate a Query object.
         """
-        self.reopen()
+        # Only reopen the database if this is the only query.
+        # Re-opening the database will invalidate the parent Enquire
+        # as they share a reference to the backend.
+        if self.query_count == 1:
+            if echo:
+                print 'Reopening'
+            self.reopen()
 
         def get_enquire():
             # Enquire requires a reference to the currently opened backend
