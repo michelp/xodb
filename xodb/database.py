@@ -69,6 +69,7 @@ class Record(object):
 
     def __init__(self, document, percent, rank, weight, query, db):
         self._xodb_document = document
+        self._id = document.get_docid()
         self._xodb_percent = percent
         self._xodb_rank = rank
         self._xodb_weight = weight
@@ -78,9 +79,19 @@ class Record(object):
 
     @lazy_property
     def _xodb_schema(self):
-        typ, data = loads(self._xodb_document.get_data())
-        self._loaded = True
-        return _lookup_schema(typ).from_flat(data)
+
+        def get_schema():
+            try:
+                json = self._xodb_document.get_data()
+            except xapian.DatabaseError:
+                # _xodb_document has a pointer to a closed database
+                self._xodb_document = self._xodb_db.backend.get_document(self._id)
+                json = self._xodb_document.get_data()
+            typ, data = loads(json)
+            self._loaded = True
+            return _lookup_schema(typ).from_flat(data)
+
+        return self._xodb_db.retry_if_modified(get_schema, RETRY_LIMIT)
 
     def __getattr__(self, name):
         if self._xodb_db.use_values and not self._loaded:
@@ -214,6 +225,24 @@ def reconnector(func):
             db.reconnect()
             raise
     return _connect
+
+
+def query_counter(func):
+    """Adds a parameter to db that will be the count of concurrent queries.
+
+       See `Database.query` for use case.
+    """
+    @wraps(func)
+    def counter(db, *args, **kwargs):
+        try:
+            if not hasattr(db, 'query_count'):
+                db.query_count = 0
+            db.query_count += 1
+            for x in func(db, *args, **kwargs):
+                yield x
+        finally:
+            db.query_count -= 1
+    return counter
 
 
 class Database(object):
@@ -429,6 +458,9 @@ class Database(object):
             self.value_sorts[name] = sort
             self.backend.set_metadata(self.value_sort_prefix + name, sort)
         return value_index
+
+    def __nonzero__(self):
+        return True
 
     def __len__(self):
         """ Return the number of documents in this database. """
@@ -850,6 +882,7 @@ class Database(object):
                                         default_op,
                                         parser_flags) for q in query))
 
+    @query_counter
     @reconnector
     def query(self, query,
               offset=0,
@@ -875,7 +908,13 @@ class Database(object):
         object.  A string is passed into xapians QueryParser first to
         generate a Query object.
         """
-        self.reopen()
+        # Only reopen the database if this is the only query.
+        # Re-opening the database will invalidate the parent Enquire
+        # as they share a reference to the backend.
+        if self.query_count == 1:
+            if echo:
+                print 'Reopening'
+            self.reopen()
 
         def get_enquire():
             # Enquire requires a reference to the currently opened backend
