@@ -69,6 +69,7 @@ class Record(object):
 
     def __init__(self, document, percent, rank, weight, query, db):
         self._xodb_document = document
+        self._id = document.get_docid()
         self._xodb_percent = percent
         self._xodb_rank = rank
         self._xodb_weight = weight
@@ -78,9 +79,19 @@ class Record(object):
 
     @lazy_property
     def _xodb_schema(self):
-        typ, data = loads(self._xodb_document.get_data())
-        self._loaded = True
-        return _lookup_schema(typ).from_flat(data)
+
+        def get_schema():
+            try:
+                json = self._xodb_document.get_data()
+            except xapian.DatabaseError:
+                # _xodb_document has a pointer to a closed database
+                self._xodb_document = self._xodb_db.backend.get_document(self._id)
+                json = self._xodb_document.get_data()
+            typ, data = loads(json)
+            self._loaded = True
+            return _lookup_schema(typ).from_flat(data)
+
+        return self._xodb_db.retry_if_modified(get_schema, RETRY_LIMIT)
 
     def __getattr__(self, name):
         if self._xodb_db.use_values and not self._loaded:
