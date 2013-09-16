@@ -430,6 +430,9 @@ class Database(object):
             self.backend.set_metadata(self.value_sort_prefix + name, sort)
         return value_index
 
+    def __nonzero__(self):
+        return True
+
     def __len__(self):
         """ Return the number of documents in this database. """
         self.reopen()
